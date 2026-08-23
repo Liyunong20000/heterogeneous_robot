@@ -1,0 +1,23 @@
+<?xml version="1.0"?>
+<launch>
+  <arg name="joy" default="false"/>
+  <arg name="joy_device" default="/dev/input/js0"/>
+  <arg name="speed" default="0.5"/>
+  <arg name="turn" default="1.0"/>
+  <arg name="key_timeout" default="0.1"/>
+  <arg name="pose_step" default="0.0174533"/>
+
+  <node name="joy" pkg="joy" type="joy_node" required="true" if="$(arg joy)">
+    <param name="autorepeat_rate" value="5.0"/>
+    <param name="dev" value="$(arg joy_device)"/>
+  </node>
+
+  <node name="spot_kortex_teleop" pkg="scorpiox"
+        type="spot_kortex_teleop.py" output="screen" required="true">
+    <param name="joy" value="$(arg joy)"/>
+    <param name="speed" value="$(arg speed)"/>
+    <param name="turn" value="$(arg turn)"/>
+    <param name="key_timeout" value="$(arg key_timeout)"/>
+    <param name="pose_step" value="$(arg pose_step)"/>
+  </node>
+</launch>
