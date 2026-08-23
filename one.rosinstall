@@ -1,0 +1,35 @@
+# Kinova Kortex ROS (pinned commit from develop/noetic_ros1)
+- git:
+    local-name: ros_kortex
+    uri: git@github.com:Liyunong20000/ros_kortex.git
+    version: a3d082109bc3d16bea70cf22d07fcd26d89a0ccb
+
+# Velocity smoother (pinned commit from develop/noetic_ros1)
+- git:
+    local-name: yocs_velocity_smoother
+    uri: git@github.com:Liyunong20000/yocs_velocity_smoother.git
+    version: a1657366c41145d4089e1a34faa2a16d41f152c2
+
+# CHAMP quadruped framework (pinned commit from develop/noetic_ros1)
+- git:
+    local-name: champ
+    uri: git@github.com:Liyunong20000/champ.git
+    version: 798f03026742d935cf39fbdb61430be8c1c8174a
+
+# Spot description (pinned commit from the gazebo branch)
+- git:
+    local-name: spot_ros
+    uri: https://github.com/chvmp/spot_ros.git
+    version: ff6cf1def44624565a838db99e08b342ba009f2f
+
+# CHAMP robot configurations, including spot_config
+- git:
+    local-name: robots
+    uri: https://github.com/chvmp/robots.git
+    version: 83d59811d262d52c16fe8b6da8f269ae312e1c5f
+
+# Gazebo link attachment used by the door-opening demo
+- git:
+    local-name: gazebo_ros_link_attacher
+    uri: https://github.com/pal-robotics/gazebo_ros_link_attacher.git
+    version: 1d170c4
