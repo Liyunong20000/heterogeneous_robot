@@ -8,6 +8,8 @@
   <arg name="gui" default="true"/>
   <arg name="paused" default="true"/>
   <arg name="auto_unpause" default="true"/>
+  <arg name="start_moveit" default="true"/>
+  <arg name="moveit_use_hard_limits" default="false"/>
   <arg name="start_rviz" default="true"/>
   <arg name="rviz_config" default="$(find scorpiox)/config/spot_kortex_gazebo.rviz"/>
 
@@ -25,7 +27,7 @@
   <arg name="mount_rpy" default="0 0 0"/>
 
   <arg name="start_champ" default="true"/>
-  <arg name="start_state_estimation" default="true"/>
+  <arg name="start_state_estimation" default="false"/>
   <arg name="controller_timeout" default="45.0"/>
   <arg name="spawn_configuration_delay" default="1.5"/>
   <arg name="gravity_ramp_steps" default="10"/>
@@ -88,6 +90,8 @@
     <arg name="gui" value="$(arg gui)"/>
     <arg name="paused" value="$(arg paused)"/>
     <arg name="use_sim_time" value="true"/>
+    <!-- Do not let the remaining nodes silently connect to a stale Gazebo. -->
+    <arg name="server_required" value="true"/>
   </include>
 
   <!--
@@ -119,6 +123,32 @@
   <node name="spot_kortex_gripper_controller_spawner" pkg="controller_manager" type="spawner"
         output="screen" if="$(arg with_gripper)"
         args="arm_robotiq_2f_85_gripper_controller"/>
+
+  <!--
+    Reuse the Kortex MoveIt configuration without replacing the combined
+    Spot+Gen3 robot_description.  arm_prefix makes MoveIt target the same
+    trajectory and gripper controllers that gazebo_ros_control starts above.
+  -->
+  <group if="$(arg start_moveit)">
+    <include file="$(find gen3_robotiq_2f_85_move_it_config)/launch/move_group.launch"
+             if="$(arg with_gripper)">
+      <arg name="dof" value="7"/>
+      <arg name="prefix" value="$(arg arm_prefix)"/>
+      <arg name="use_hard_limits" value="$(arg moveit_use_hard_limits)"/>
+    </include>
+
+    <include file="$(find gen3_move_it_config)/launch/move_group.launch"
+             unless="$(arg with_gripper)">
+      <arg name="dof" value="7"/>
+      <arg name="prefix" value="$(arg arm_prefix)"/>
+      <arg name="use_hard_limits" value="$(arg moveit_use_hard_limits)"/>
+    </include>
+
+    <!-- Override the arm-only SRDF with matching Spot+Gen3 semantics. -->
+    <param name="robot_description_semantic"
+           command="$(find xacro)/xacro $(find scorpiox)/config/spot_kortex.srdf.xacro
+                    prefix:=$(arg arm_prefix) with_gripper:=$(arg with_gripper)"/>
+  </group>
 
   <node name="contact_sensor" pkg="champ_gazebo" type="contact_sensor" output="screen"
         if="$(arg start_state_estimation)"/>
