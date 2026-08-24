@@ -1,0 +1,30 @@
+<?xml version="1.0"?>
+<robot name="spot_kortex" xmlns:xacro="http://www.ros.org/wiki/xacro">
+  <xacro:arg name="prefix" default="arm_"/>
+  <xacro:arg name="with_gripper" default="true"/>
+
+  <!-- Reuse the upstream Kortex planning groups and named arm states. -->
+  <xacro:if value="$(arg with_gripper)">
+    <xacro:include filename="$(find gen3_robotiq_2f_85_move_it_config)/config/7dof/gen3_robotiq_2f_85.srdf.xacro"/>
+  </xacro:if>
+  <xacro:unless value="$(arg with_gripper)">
+    <xacro:include filename="$(find gen3_move_it_config)/config/7dof/gen3.srdf.xacro"/>
+  </xacro:unless>
+
+  <!-- Adjacent Spot links are expected to touch at their joints. -->
+  <xacro:macro name="disable_spot_leg_adjacent_collisions" params="leg">
+    <disable_collisions link1="body" link2="${leg}_hip" reason="Adjacent"/>
+    <disable_collisions link1="${leg}_hip" link2="${leg}_upper_leg" reason="Adjacent"/>
+    <disable_collisions link1="${leg}_upper_leg" link2="${leg}_lower_leg" reason="Adjacent"/>
+  </xacro:macro>
+
+  <xacro:disable_spot_leg_adjacent_collisions leg="front_left"/>
+  <xacro:disable_spot_leg_adjacent_collisions leg="front_right"/>
+  <xacro:disable_spot_leg_adjacent_collisions leg="rear_left"/>
+  <xacro:disable_spot_leg_adjacent_collisions leg="rear_right"/>
+
+  <!-- The payload plate and arm base are rigidly mounted to Spot. -->
+  <disable_collisions link1="body" link2="spot_kortex_mount" reason="Adjacent"/>
+  <disable_collisions link1="spot_kortex_mount" link2="$(arg prefix)base_link" reason="Adjacent"/>
+  <disable_collisions link1="body" link2="$(arg prefix)base_link" reason="Mounted"/>
+</robot>
