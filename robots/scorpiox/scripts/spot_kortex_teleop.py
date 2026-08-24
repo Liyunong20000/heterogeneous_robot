@@ -12,6 +12,7 @@ import rospy
 from champ_msgs.msg import Pose as PoseLite
 from geometry_msgs.msg import Pose, Twist
 from sensor_msgs.msg import Joy
+from std_msgs.msg import Bool, String
 
 
 HELP = """
@@ -33,9 +34,15 @@ e/c : increase/decrease angular speed by 10%
 f/h : decrease/increase body roll
 t/b : increase/decrease body pitch
 r/y : increase/decrease body yaw
+g   : toggle mocap control between BASE and ARM modes
+d   : enable/disable mocap tracking (disabled at startup)
 space or any other key : stop
 Ctrl-C : quit
 """
+
+
+BASE_MODE = "base"
+ARM_MODE = "arm"
 
 
 VELOCITY_BINDINGS = {
@@ -102,15 +109,34 @@ class SpotKortexTeleop:
             "body_pose/raw", PoseLite, queue_size=1
         )
         self.pose_publisher = rospy.Publisher("body_pose", Pose, queue_size=1)
+        self.control_mode_topic = rospy.get_param(
+            "~control_mode_topic", "/spot_kortex/control_mode"
+        )
+        self.control_mode_publisher = rospy.Publisher(
+            self.control_mode_topic, String, queue_size=1, latch=True
+        )
+        self.mocap_tracking_topic = rospy.get_param(
+            "~mocap_tracking_topic", "/spot_kortex/mocap_tracking_enabled"
+        )
+        self.mocap_tracking_publisher = rospy.Publisher(
+            self.mocap_tracking_topic, Bool, queue_size=1, latch=True
+        )
 
         self.joy_mode = rospy.get_param("~joy", False)
         self.speed = rospy.get_param("~speed", 0.5)
         self.turn = rospy.get_param("~turn", 1.0)
         self.key_timeout = rospy.get_param("~key_timeout", 0.1)
         self.pose_step = rospy.get_param("~pose_step", math.radians(1.0))
+        self.mocap_tracking_publish_rate = rospy.get_param(
+            "~mocap_tracking_publish_rate", 10.0
+        )
+        if self.mocap_tracking_publish_rate <= 0.0:
+            raise ValueError("mocap_tracking_publish_rate must be greater than zero")
         self.body_roll = 0.0
         self.body_pitch = 0.0
         self.body_yaw = 0.0
+        self.control_mode = BASE_MODE
+        self.mocap_tracking_enabled = False
 
         self.joy_subscriber = None
         if self.joy_mode:
@@ -118,7 +144,13 @@ class SpotKortexTeleop:
                 "joy", Joy, self.joy_callback, queue_size=1
             )
 
-        rospy.on_shutdown(self.stop)
+        self.mocap_tracking_timer = rospy.Timer(
+            rospy.Duration(1.0 / self.mocap_tracking_publish_rate),
+            self._publish_mocap_tracking_timer,
+        )
+        rospy.on_shutdown(self.shutdown)
+        self.publish_control_mode()
+        self.publish_mocap_tracking_status()
 
     def publish_velocity(self, x, y, z, yaw):
         command = Twist()
@@ -188,6 +220,33 @@ class SpotKortexTeleop:
         body_pose.yaw = self.body_yaw
         self.publish_body_pose(body_pose)
 
+    def publish_control_mode(self):
+        self.control_mode_publisher.publish(String(data=self.control_mode))
+        rospy.loginfo("Mocap control mode: %s", self.control_mode.upper())
+
+    def toggle_control_mode(self):
+        self.stop()
+        self.control_mode = ARM_MODE if self.control_mode == BASE_MODE else BASE_MODE
+        self.publish_control_mode()
+
+    def publish_mocap_tracking_status(self):
+        self.mocap_tracking_publisher.publish(
+            Bool(data=self.mocap_tracking_enabled)
+        )
+
+    def _publish_mocap_tracking_timer(self, _event):
+        self.publish_mocap_tracking_status()
+
+    def toggle_mocap_tracking(self):
+        self.stop()
+        self.mocap_tracking_enabled = not self.mocap_tracking_enabled
+        self.publish_mocap_tracking_status()
+        rospy.loginfo(
+            "Mocap tracking: %s (control mode: %s)",
+            "ENABLED" if self.mocap_tracking_enabled else "DISABLED",
+            self.control_mode.upper(),
+        )
+
     def get_key(self, settings):
         tty.setraw(sys.stdin.fileno())
         try:
@@ -198,6 +257,11 @@ class SpotKortexTeleop:
 
     def stop(self):
         self.velocity_publisher.publish(Twist())
+
+    def shutdown(self):
+        self.mocap_tracking_enabled = False
+        self.publish_mocap_tracking_status()
+        self.stop()
 
     def run_keyboard(self):
         if not os.isatty(sys.stdin.fileno()):
@@ -212,7 +276,13 @@ class SpotKortexTeleop:
             while not rospy.is_shutdown():
                 key = self.get_key(settings)
 
-                if key in VELOCITY_BINDINGS:
+                if key == "g":
+                    self.toggle_control_mode()
+                    moving = False
+                elif key == "d":
+                    self.toggle_mocap_tracking()
+                    moving = False
+                elif key in VELOCITY_BINDINGS:
                     self.publish_velocity(*VELOCITY_BINDINGS[key])
                     moving = True
                 elif key in POSE_BINDINGS:
@@ -251,6 +321,6 @@ def main():
 if __name__ == "__main__":
     try:
         main()
-    except (rospy.ROSInterruptException, RuntimeError) as error:
+    except (rospy.ROSInterruptException, RuntimeError, ValueError) as error:
         rospy.logerr("Spot + Kortex teleop stopped: %s", error)
         raise SystemExit(1)
