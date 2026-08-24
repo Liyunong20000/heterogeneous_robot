@@ -26,6 +26,18 @@
   <arg name="mount_xyz" default="0 0 0.105"/>
   <arg name="mount_rpy" default="0 0 0"/>
 
+  <!-- OptiTrack rigid bodies and Spot/Kortex mocap teleoperation. -->
+  <arg name="start_mocap" default="true"/>
+  <arg name="start_mocap_teleop" default="true"/>
+  <arg name="torso_rigid_body_id" default="11"/>
+  <arg name="hand_rigid_body_id" default="12"/>
+  <arg name="mocap_multicast_address" default="239.255.42.99"/>
+  <arg name="mocap_command_port" default="1510"/>
+  <arg name="mocap_data_port" default="1511"/>
+  <arg name="mocap_tracking_topic" default="/spot_kortex/mocap_tracking_enabled"/>
+  <arg name="mocap_control_config"
+       default="$(find scorpiox)/config/spot_kortex_mocap_teleop.yaml"/>
+
   <arg name="start_champ" default="true"/>
   <arg name="start_state_estimation" default="false"/>
   <arg name="controller_timeout" default="45.0"/>
@@ -53,6 +65,43 @@
     <param name="use_tf_static" value="false"/>
     <param name="publish_frequency" value="100"/>
     <param name="ignore_timestamp" value="true"/>
+  </node>
+
+  <group if="$(arg start_mocap)">
+    <node pkg="mocap_optitrack" type="mocap_node" name="mocap_node_torso_hand"
+          output="screen" respawn="false" required="false">
+      <rosparam subst_value="true">
+        rigid_bodies:
+          '$(arg torso_rigid_body_id)':
+            pose: torso/mocap/pose
+            child_frame_id: torso
+            parent_frame_id: world
+          '$(arg hand_rigid_body_id)':
+            pose: hand/mocap/pose
+            child_frame_id: hand
+            parent_frame_id: world
+        optitrack_config:
+          enable_optitrack: true
+          multicast_address: $(arg mocap_multicast_address)
+          command_port: $(arg mocap_command_port)
+          data_port: $(arg mocap_data_port)
+      </rosparam>
+      <remap from="~torso/mocap/pose" to="/torso/mocap/pose"/>
+      <remap from="~hand/mocap/pose" to="/hand/mocap/pose"/>
+    </node>
+  </group>
+
+  <node name="spot_kortex_mocap_teleop" pkg="scorpiox"
+        type="spot_kortex_mocap_teleop.py" output="screen"
+        if="$(arg start_mocap_teleop)">
+    <env name="PYTHONNOUSERSITE" value="1"/>
+    <rosparam command="load" file="$(arg mocap_control_config)"/>
+    <param name="torso_topic" value="/torso/mocap/pose"/>
+    <param name="hand_topic" value="/hand/mocap/pose"/>
+    <param name="ground_truth_topic" value="/odom/ground_truth"/>
+    <param name="mode_topic" value="/spot_kortex/control_mode"/>
+    <param name="mocap_tracking_topic" value="$(arg mocap_tracking_topic)"/>
+    <param name="cmd_vel_topic" value="/cmd_vel"/>
   </node>
 
   <group if="$(arg start_champ)">

@@ -6,6 +6,9 @@
   <arg name="turn" default="1.0"/>
   <arg name="key_timeout" default="0.1"/>
   <arg name="pose_step" default="0.0174533"/>
+  <arg name="control_mode_topic" default="/spot_kortex/control_mode"/>
+  <arg name="mocap_tracking_topic" default="/spot_kortex/mocap_tracking_enabled"/>
+  <arg name="mocap_tracking_publish_rate" default="10.0"/>
 
   <node name="joy" pkg="joy" type="joy_node" required="true" if="$(arg joy)">
     <param name="autorepeat_rate" value="5.0"/>
@@ -19,5 +22,8 @@
     <param name="turn" value="$(arg turn)"/>
     <param name="key_timeout" value="$(arg key_timeout)"/>
     <param name="pose_step" value="$(arg pose_step)"/>
+    <param name="control_mode_topic" value="$(arg control_mode_topic)"/>
+    <param name="mocap_tracking_topic" value="$(arg mocap_tracking_topic)"/>
+    <param name="mocap_tracking_publish_rate" value="$(arg mocap_tracking_publish_rate)"/>
   </node>
 </launch>
