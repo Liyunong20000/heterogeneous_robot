@@ -10,6 +10,7 @@ catkin_install_python(PROGRAMS
   scripts/kortex_arm_motion.py
   scripts/kortex_keyboard_control.py
   scripts/kortex_open_door_demo.py
+  scripts/spot_kortex_mocap_teleop.py
   scripts/spot_kortex_teleop.py
   scripts/wait_for_controllers_and_unpause.py
   DESTINATION ${CATKIN_PACKAGE_BIN_DESTINATION}
