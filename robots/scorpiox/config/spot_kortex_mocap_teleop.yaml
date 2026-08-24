@@ -1,0 +1,44 @@
+# Torso-to-Spot planar pose tracking.
+control_rate: 20.0
+linear_kp: 1.0
+yaw_kp: 1.5
+
+# A nonzero lower bound overcomes the gait's practical dead zone. The command
+# becomes exactly zero once its corresponding pose error enters the tolerance.
+min_linear_speed: 0.10
+max_linear_speed: 0.40
+max_lateral_speed: 0.20
+min_yaw_speed: 0.08
+max_yaw_speed: 0.35
+
+position_tolerance: 0.03
+yaw_tolerance: 0.0349066  # 2 degrees
+
+# Stop rather than integrate or chase an old goal when an input disappears.
+mocap_timeout: 0.5
+ground_truth_timeout: 0.5
+
+# The keyboard teleop publishes this enable state as a heartbeat. If the
+# teleop exits or communication stops, mocap control is disabled automatically.
+tracking_command_timeout: 0.5
+
+# Hand-to-MoveIt translation control. Hand orientation is intentionally not
+# mapped yet; the end-effector orientation at ARM-mode entry is held fixed.
+move_group_name: arm
+robot_description: robot_description
+end_effector_link: arm_tool_frame
+moveit_wait_timeout: 10.0
+moveit_planning_time: 5.0
+moveit_planning_attempts: 5
+arm_velocity_scaling: 0.70
+arm_acceleration_scaling: 0.60
+arm_position_tolerance: 0.005
+arm_orientation_tolerance: 0.02
+
+# Ignore mocap jitter below 1.5 cm and do not submit goals faster than 2 Hz.
+arm_translation_threshold: 0.015
+arm_command_period: 0.50
+arm_failure_retry_period: 2.0
+
+# Reject, rather than clamp, an unexpectedly large relative hand motion.
+max_hand_displacement: 0.50
