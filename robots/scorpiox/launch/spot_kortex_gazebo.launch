@@ -34,6 +34,20 @@
   <arg name="mocap_multicast_address" default="239.255.42.99"/>
   <arg name="mocap_command_port" default="1510"/>
   <arg name="mocap_data_port" default="1511"/>
+  <!--
+    mocap_optitrack already converts Motive's Y-up coordinates to ROS Z-up.
+    These values describe the pose of mocap_world in Gazebo's world frame and
+    provide the remaining origin/orientation calibration. The publisher uses
+    the argument order x y z yaw pitch roll.
+  -->
+  <arg name="gazebo_world_frame" default="world"/>
+  <arg name="mocap_parent_frame" default="mocap_world"/>
+  <arg name="mocap_world_x" default="0.0"/>
+  <arg name="mocap_world_y" default="0.0"/>
+  <arg name="mocap_world_z" default="0.0"/>
+  <arg name="mocap_world_yaw" default="0.0"/>
+  <arg name="mocap_world_pitch" default="0.0"/>
+  <arg name="mocap_world_roll" default="0.0"/>
   <arg name="mocap_tracking_topic" default="/spot_kortex/mocap_tracking_enabled"/>
   <arg name="mocap_control_config"
        default="$(find scorpiox)/config/spot_kortex_mocap_teleop.yaml"/>
@@ -67,6 +81,13 @@
     <param name="ignore_timestamp" value="true"/>
   </node>
 
+  <!-- Transform mocap poses into Gazebo world before either controller uses them. -->
+  <node name="mocap_world_to_gazebo_world" pkg="tf2_ros"
+        type="static_transform_publisher"
+        args="$(arg mocap_world_x) $(arg mocap_world_y) $(arg mocap_world_z)
+              $(arg mocap_world_yaw) $(arg mocap_world_pitch) $(arg mocap_world_roll)
+              $(arg gazebo_world_frame) $(arg mocap_parent_frame)"/>
+
   <group if="$(arg start_mocap)">
     <node pkg="mocap_optitrack" type="mocap_node" name="mocap_node_torso_hand"
           output="screen" respawn="false" required="false">
@@ -75,11 +96,11 @@
           '$(arg torso_rigid_body_id)':
             pose: torso/mocap/pose
             child_frame_id: torso
-            parent_frame_id: world
+            parent_frame_id: $(arg mocap_parent_frame)
           '$(arg hand_rigid_body_id)':
             pose: hand/mocap/pose
             child_frame_id: hand
-            parent_frame_id: world
+            parent_frame_id: $(arg mocap_parent_frame)
         optitrack_config:
           enable_optitrack: true
           multicast_address: $(arg mocap_multicast_address)
@@ -102,6 +123,7 @@
     <param name="mode_topic" value="/spot_kortex/control_mode"/>
     <param name="mocap_tracking_topic" value="$(arg mocap_tracking_topic)"/>
     <param name="cmd_vel_topic" value="/cmd_vel"/>
+    <param name="mocap_target_frame" value="$(arg gazebo_world_frame)"/>
   </node>
 
   <group if="$(arg start_champ)">
