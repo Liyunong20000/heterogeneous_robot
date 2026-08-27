@@ -22,8 +22,9 @@ ground_truth_timeout: 0.5
 # teleop exits or communication stops, mocap control is disabled automatically.
 tracking_command_timeout: 0.5
 
-# Hand-to-MoveIt translation control. Hand orientation is intentionally not
-# mapped yet; the end-effector orientation at ARM-mode entry is held fixed.
+# Hand-to-MoveIt translation control. Torso yaw at ARM-mode entry defines the
+# operator-local x/y axes. Hand orientation is intentionally not mapped yet;
+# the end-effector orientation at ARM-mode entry is held fixed.
 move_group_name: arm
 robot_description: robot_description
 end_effector_link: arm_tool_frame
@@ -41,4 +42,4 @@ arm_command_period: 0.50
 arm_failure_retry_period: 2.0
 
 # Reject, rather than clamp, an unexpectedly large relative hand motion.
-max_hand_displacement: 0.50
+max_hand_displacement: 1.00
