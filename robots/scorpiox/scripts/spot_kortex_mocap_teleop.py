@@ -13,6 +13,8 @@ import threading
 import time
 
 import rospy
+import tf2_geometry_msgs
+import tf2_ros
 from actionlib_msgs.msg import GoalID
 from geometry_msgs.msg import Pose, PoseStamped, Twist
 from nav_msgs.msg import Odometry
@@ -105,6 +107,9 @@ class SpotKortexMocapTeleop:
             "~mocap_tracking_topic", "/spot_kortex/mocap_tracking_enabled"
         )
         self.cmd_vel_topic = rospy.get_param("~cmd_vel_topic", "/cmd_vel")
+        self.mocap_target_frame = rospy.get_param(
+            "~mocap_target_frame", "world"
+        ).strip()
 
         self.control_rate = rospy.get_param("~control_rate", 20.0)
         self.linear_kp = rospy.get_param("~linear_kp", 1.0)
@@ -169,6 +174,9 @@ class SpotKortexMocapTeleop:
             "/arm_gen3_joint_trajectory_controller/follow_joint_trajectory/cancel",
         )
         self._validate_parameters()
+
+        self.tf_buffer = tf2_ros.Buffer(cache_time=rospy.Duration(5.0))
+        self.tf_listener = tf2_ros.TransformListener(self.tf_buffer)
 
         self._lock = threading.RLock()
         self.mode = BASE_MODE
@@ -252,15 +260,19 @@ class SpotKortexMocapTeleop:
 
         rospy.loginfo(
             "Mocap teleop ready with tracking DISABLED in BASE mode: "
-            "torso=%s, hand=%s, odom=%s, mode=%s, tracking=%s",
+            "torso=%s, hand=%s, odom=%s, target_frame=%s, mode=%s, tracking=%s",
             self.torso_topic,
             self.hand_topic,
             self.ground_truth_topic,
+            self.mocap_target_frame,
             self.mode_topic,
             self.mocap_tracking_topic,
         )
 
     def _validate_parameters(self):
+        if not self.mocap_target_frame:
+            raise ValueError("mocap_target_frame cannot be empty")
+
         positive = {
             "control_rate": self.control_rate,
             "linear_kp": self.linear_kp,
@@ -303,9 +315,47 @@ class SpotKortexMocapTeleop:
             if value <= 0.0 or value > 1.0:
                 raise ValueError("{} must be in (0, 1]".format(name))
 
-    def _torso_callback(self, message):
+    def _transform_mocap_pose(self, message, label):
+        source_frame = message.header.frame_id.strip()
+        if not source_frame:
+            rospy.logwarn_throttle(
+                2.0,
+                "Ignoring %s pose: header.frame_id is empty",
+                label,
+            )
+            return None
+
+        if source_frame == self.mocap_target_frame:
+            return message
+
         try:
-            pose = planar_pose(message.pose)
+            # The calibration is static, so the latest transform is valid for
+            # every mocap sample and avoids mixing wall-time mocap stamps with
+            # Gazebo's simulated clock.
+            transform = self.tf_buffer.lookup_transform(
+                self.mocap_target_frame,
+                source_frame,
+                rospy.Time(0),
+                rospy.Duration(0.0),
+            )
+            return tf2_geometry_msgs.do_transform_pose(message, transform)
+        except tf2_ros.TransformException as error:
+            rospy.logwarn_throttle(
+                2.0,
+                "Ignoring %s pose: cannot transform %s -> %s (%s)",
+                label,
+                source_frame,
+                self.mocap_target_frame,
+                error,
+            )
+            return None
+
+    def _torso_callback(self, message):
+        transformed = self._transform_mocap_pose(message, "torso")
+        if transformed is None:
+            return
+        try:
+            pose = planar_pose(transformed.pose)
         except ValueError as error:
             rospy.logwarn_throttle(2.0, "Ignoring torso pose: %s", error)
             return
@@ -315,8 +365,11 @@ class SpotKortexMocapTeleop:
             self.torso_received_at = rospy.Time.now()
 
     def _hand_callback(self, message):
+        transformed = self._transform_mocap_pose(message, "hand")
+        if transformed is None:
+            return
         try:
-            pose = position_3d(message.pose)
+            pose = position_3d(transformed.pose)
         except ValueError as error:
             rospy.logwarn_throttle(2.0, "Ignoring hand pose: %s", error)
             return
@@ -412,19 +465,14 @@ class SpotKortexMocapTeleop:
         torso_dx = self.torso_pose.x - self.torso_reference.x
         torso_dy = self.torso_pose.y - self.torso_reference.y
 
-        # Align the mocap torso's initial heading with Spot's initial heading.
-        alignment_yaw = self.base_reference.yaw - self.torso_reference.yaw
-        cosine = math.cos(alignment_yaw)
-        sine = math.sin(alignment_yaw)
-        base_dx = cosine * torso_dx - sine * torso_dy
-        base_dy = sine * torso_dx + cosine * torso_dy
-
         torso_yaw_delta = wrap_angle(
             self.torso_pose.yaw - self.torso_reference.yaw
         )
         return PlanarPose(
-            self.base_reference.x + base_dx,
-            self.base_reference.y + base_dy,
+            # Mocap samples have already been transformed into Gazebo world,
+            # so no second heading alignment belongs here.
+            self.base_reference.x + torso_dx,
+            self.base_reference.y + torso_dy,
             wrap_angle(self.base_reference.yaw + torso_yaw_delta),
         )
 
@@ -652,11 +700,12 @@ class SpotKortexMocapTeleop:
             self.arm_reference_pending = False
 
         rospy.loginfo(
-            "Captured ARM references: hand=(%.3f, %.3f, %.3f), "
+            "Captured ARM references: hand=(%.3f, %.3f, %.3f), torso_yaw=%.1f deg, "
             "%s=(%.3f, %.3f, %.3f); end-effector orientation will be held",
             hand_reference.x,
             hand_reference.y,
             hand_reference.z,
+            math.degrees(torso_yaw_reference),
             self.end_effector_link,
             current_pose.position.x,
             current_pose.position.y,
@@ -683,7 +732,8 @@ class SpotKortexMocapTeleop:
             hand_dx * hand_dx + hand_dy * hand_dy + hand_dz * hand_dz
         )
 
-        # Express mocap-world translation in Spot's body frame at ARM entry.
+        # Express the calibrated world displacement in the operator's torso
+        # frame at ARM entry, then map that local displacement 1:1 to the arm.
         cosine = math.cos(torso_yaw_reference)
         sine = math.sin(torso_yaw_reference)
         body_dx = cosine * hand_dx + sine * hand_dy
